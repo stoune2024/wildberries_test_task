@@ -1,5 +1,7 @@
 import requests
 import time
+from openpyxl import Workbook
+
 
 # Целевой URL из WB API
 BASE_URL = "https://search.wb.ru/exactmatch/ru/common/v4/search"
@@ -146,21 +148,96 @@ def parse_products(query, max_pages=3):
         print(f"Ошибка при попытке парсинга: {e}")
 
 
-# if __name__ == "__main__":
-#     query = "пальто из натуральной шерсти"
-#
-#     # Парсим товары
-#     products = parse_products(query, max_pages=5)
-#
-#     print(f"Всего товаров: {len(products)}")
-#
-#     # Сохраняем полный каталог
-#     save_to_xlsx(products, "all_products.xlsx")
-#
-#     # Применяем фильтр
-#     filtered = filter_products(products)
-#
-#     # Сохраняем отфильтрованные товары
-#     save_to_xlsx(filtered, "filtered_products.xlsx")
-#
-#     print("Готово!")
+def save_to_xlsx(data, filename):
+    """
+    Сохраняет список товаров в Excel файл.
+
+    :param data: list словарей
+    :param filename: имя файла
+    """
+    try:
+        wb = Workbook()
+        ws = wb.active
+
+        # Заголовки колонок
+        headers = [
+            "Ссылка",
+            "Артикул",
+            "Название",
+            "Цена",
+            "Описание",
+            "Изображения",
+            "Характеристики",
+            "Селлер",
+            "Ссылка на селлера",
+            "Размеры",
+            "Остаток",
+            "Рейтинг",
+            "Отзывы",
+        ]
+
+        ws.append(headers)
+
+        # Записываем строки
+        for p in data:
+            ws.append(
+                [
+                    p["url"],
+                    p["article"],
+                    p["name"],
+                    p["price"],
+                    p["description"],
+                    ", ".join(p["images"]),
+                    str(p["characteristics"]),
+                    p["seller_name"],
+                    p["seller_url"],
+                    ", ".join(p["sizes"]),
+                    p["stock"],
+                    p["rating"],
+                    p["reviews_count"],
+                ]
+            )
+
+        wb.save(filename)
+    except Exception as e:
+        print(f"Ошибка при попытке сохранить в .xlsx: {e}")
+
+
+def filter_products(data):
+    """
+    Фильтрует товары по условиям из ТЗ:
+    - рейтинг >= 4.5
+    - цена <= 10000
+    - страна = Россия
+
+    :param data: список товаров
+    :return: отфильтрованный список
+    """
+    try:
+        return [
+            p
+            for p in data
+            if p["rating"] >= 4.5 and p["price"] <= 10000 and p["country"] == "Россия"
+        ]
+    except Exception as e:
+        print(f"Ошибка при попытке фильтрации: {e}")
+
+
+if __name__ == "__main__":
+    query = "пальто из натуральной шерсти"
+
+    # Парсим товары
+    products = parse_products(query, max_pages=5)
+
+    print(f"Всего товаров: {len(products)}")
+
+    # Сохраняем полный каталог
+    save_to_xlsx(products, "all_products.xlsx")
+
+    # Применяем фильтр
+    filtered = filter_products(products)
+
+    # Сохраняем отфильтрованные товары
+    save_to_xlsx(filtered, "filtered_products.xlsx")
+
+    print("Готово!")
