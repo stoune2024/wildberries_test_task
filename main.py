@@ -19,152 +19,166 @@ def fetch_page(query, page):
     """
     Запрос к более стабильному v5 endpoint
     """
+    try:
+        params = {
+            "ab_testing": "false",
+            "appType": 1,
+            "curr": "rub",
+            "dest": -59208,
+            "query": query,
+            "resultset": "catalog",
+            "sort": "popular",
+            "page": page,
+            "limit": 50,
+            "lang": "ru",
+        }
 
-    params = {
-        "ab_testing": "false",
-        "appType": 1,
-        "curr": "rub",
-        "dest": -59208,
-        "query": query,
-        "resultset": "catalog",
-        "sort": "popular",
-        "page": page,
-        "limit": 50,
-        "lang": "ru",
-    }
+        response = session.get(BASE_URL, params=params, timeout=10)
 
-    response = session.get(BASE_URL, params=params, timeout=10)
+        if response.status_code == 429:
+            raise Exception("429")
 
-    if response.status_code == 429:
-        raise Exception("429")
-
-    response.raise_for_status()
-    return response.json()
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Ошибка при запросе к WB API: {e}")
 
 
 def extract_price(item):
     """
     Цена (в v5 чаще работает priceU)
     """
-    return (item.get("priceU") or item.get("salePriceU") or 0) / 100
+    try:
+        return (item.get("priceU") or item.get("salePriceU") or 0) / 100
+    except Exception as e:
+        print(f"Ошибка при попытке извлечения цены: {e}")
 
 
 def build_product(item):
     """
     Преобразование товара
     """
+    try:
+        product_id = item.get("id")
 
-    product_id = item.get("id")
-
-    return {
-        "url": f"https://www.wildberries.ru/catalog/{product_id}/detail.aspx",
-        "article": product_id,
-        "name": item.get("name"),
-        "price": extract_price(item),
-        "description": item.get("name"),
-        "images": [],
-        "characteristics": {"brand": item.get("brand")},
-        "seller_name": item.get("supplier"),
-        "seller_url": f"https://www.wildberries.ru/seller/{item.get('supplierId')}",
-        "sizes": [],
-        "stock": "Недоступно",
-        "rating": item.get("rating", 0),
-        "reviews_count": item.get("feedbacks", 0),
-        "country": "Недоступно",
-    }
+        return {
+            "url": f"https://www.wildberries.ru/catalog/{product_id}/detail.aspx",
+            "article": product_id,
+            "name": item.get("name"),
+            "price": extract_price(item),
+            "description": item.get("name"),
+            "images": [],
+            "characteristics": {"brand": item.get("brand")},
+            "seller_name": item.get("supplier"),
+            "seller_url": f"https://www.wildberries.ru/seller/{item.get('supplierId')}",
+            "sizes": [],
+            "stock": "Недоступно",
+            "rating": item.get("rating", 0),
+            "reviews_count": item.get("feedbacks", 0),
+            "country": "Недоступно",
+        }
+    except Exception as e:
+        print(f"Ошибка при попытке проебразования товара: {e}")
 
 
 def parse_products(query, max_pages=2):
     """
     Стабильный парсер с мягким rate limit
     """
+    try:
+        products = []
 
-    products = []
+        for page in range(1, max_pages + 1):
+            print(f"Парсим страницу {page}")
 
-    for page in range(1, max_pages + 1):
-        print(f"Парсим страницу {page}")
+            try:
+                data = fetch_page(query, page)
+                print(data.get("products"))
+            except Exception:
+                print("Поймали 429, делаем длинную паузу")
+                time.sleep(10)
+                continue
 
-        try:
-            data = fetch_page(query, page)
-            print(data.get("products"))
-        except Exception:
-            print("Поймали 429, делаем длинную паузу")
-            time.sleep(10)
-            continue
+            items = data.get("products", {})
 
-        items = data.get("products", {})
+            if not items:
+                print("Пусто, заканчиваем")
+                break
 
-        if not items:
-            print("Пусто, заканчиваем")
-            break
+            for item in items:
+                products.append(build_product(item))
 
-        for item in items:
-            products.append(build_product(item))
+            # Ключ к стабильности
+            sleep_time = random.uniform(4, 7)
+            print(f"Ждём {sleep_time:.2f} сек")
+            time.sleep(sleep_time)
 
-        # Ключ к стабильности
-        sleep_time = random.uniform(4, 7)
-        print(f"Ждём {sleep_time:.2f} сек")
-        time.sleep(sleep_time)
-
-    return products
+        return products
+    except Exception as e:
+        print(f"Ошибка при попытке парсинга данных: {e}")
 
 
 def save_to_xlsx(data, filename):
-    wb = Workbook()
-    ws = wb.active
+    try:
+        wb = Workbook()
+        ws = wb.active
 
-    headers = [
-        "Ссылка",
-        "Артикул",
-        "Название",
-        "Цена",
-        "Описание",
-        "Изображения",
-        "Характеристики",
-        "Селлер",
-        "Ссылка на селлера",
-        "Размеры",
-        "Остаток",
-        "Рейтинг",
-        "Отзывы",
-    ]
+        headers = [
+            "Ссылка",
+            "Артикул",
+            "Название",
+            "Цена",
+            "Описание",
+            "Изображения",
+            "Характеристики",
+            "Селлер",
+            "Ссылка на селлера",
+            "Размеры",
+            "Остаток",
+            "Рейтинг",
+            "Отзывы",
+        ]
 
-    ws.append(headers)
+        ws.append(headers)
 
-    for p in data:
-        ws.append(
-            [
-                p["url"],
-                p["article"],
-                p["name"],
-                p["price"],
-                p["description"],
-                ", ".join(p["images"]),
-                str(p["characteristics"]),
-                p["seller_name"],
-                p["seller_url"],
-                ", ".join(p["sizes"]),
-                p["stock"],
-                p["rating"],
-                p["reviews_count"],
-            ]
-        )
+        for p in data:
+            ws.append(
+                [
+                    p["url"],
+                    p["article"],
+                    p["name"],
+                    p["price"],
+                    p["description"],
+                    ", ".join(p["images"]),
+                    str(p["characteristics"]),
+                    p["seller_name"],
+                    p["seller_url"],
+                    ", ".join(p["sizes"]),
+                    p["stock"],
+                    p["rating"],
+                    p["reviews_count"],
+                ]
+            )
 
-    wb.save(filename)
+        wb.save(filename)
+    except Exception as e:
+        print(f"Ошибка при попытке сохранения в .xlsx формат: {e}")
 
 
 def filter_products(data):
     """
     Ослабленный фильтр (реально работающий)
     """
+    try:
+        result = [p for p in data if p["rating"] >= 4.5 and p["price"] <= 15000]
 
-    result = [p for p in data if p["rating"] >= 4.5 and p["price"] <= 15000]
+        if not result:
+            print("Фильтр пуст, fallback")
+            result = [p for p in data if p["rating"] >= 4.0]
 
-    if not result:
-        print("Фильтр пуст, fallback")
-        result = [p for p in data if p["rating"] >= 4.0]
-
-    return result
+        return result
+    except Exception as e:
+        print(f"Ошибка при попытке фильтрации: {e}")
 
 
 if __name__ == "__main__":
